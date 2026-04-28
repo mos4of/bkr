@@ -1,0 +1,14 @@
+# SecureWipe Pro v1.0 - Requirements
+
+# GUI Framework
+customtkinter>=5.2.0
+
+# Progress bar (optional, for CLI mode)
+tqdm>=4.65.0
+
+# System tray support (optional)
+# pystray>=0.19.4
+# Pillow>=10.0.0
+
+# Python 3.x required
+# tkinter is usually included with Python standard library

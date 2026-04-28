@@ -7,6 +7,13 @@ __pycache__/
 env/
 venv/
 ENV/
+*.egg-info/
+*.egg
+
+# PyInstaller
+dist/
+build/
+*.spec
 
 # Logs
 logs/
@@ -17,6 +24,7 @@ logs/
 .idea/
 *.swp
 *.swo
+*.swn
 
 # OS
 Thumbs.db
@@ -25,4 +33,17 @@ Desktop.ini
 
 # Temporary files
 test_data.bin
-create_secure_wipe.py
+create_*.py
+
+# Executables (keep in releases only)
+*.exe
+!releases/*.exe
+*.app
+!releases/*.app
+
+# CustomTkinter assets
+assets/
+
+# Releases folder content (keep folder, ignore contents except .gitkeep)
+releases/*
+!releases/.gitkeep
