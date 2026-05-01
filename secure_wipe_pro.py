@@ -664,6 +664,58 @@ class SecureWipePro(ctk.CTk):
         mode_text_map = {"file": "File", "folder": "Folder", "disk": "Disk"}
         self.mode_segmented.set(mode_text_map.get(mode, "File"))
 
+
+    def _on_segmented_mode_change(self, mode_text):
+        """Обробка зміни режиму через segmented button"""
+        # Map text to mode value
+        mode_map = {
+            "File": "file",
+            "Folder": "folder",
+            "Disk": "disk"
+        }
+        mode = mode_map.get(mode_text, "file")
+        self.operation_mode.set(mode)
+        
+        # Update description
+        desc_map = {
+            "file": "Знищити один файл обраним методом",
+            "folder": "Рекурсивно знищити всі файли в папці",
+            "disk": "Заповнити вільний простір диска"
+        }
+        self.mode_desc_label.configure(text=desc_map.get(mode, ""))
+        
+        if mode == "file":
+            self.target_label.configure(text="Ціль:")
+            self.target_entry.configure(placeholder_text="Перетягніть файл або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_file)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "folder":
+            self.target_label.configure(text="Папка:")
+            self.target_entry.configure(placeholder_text="Виберіть папку або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_folder)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "disk":
+            self.target_label.configure(text="Диск:")
+            self.target_entry.grid_remove()
+            self.browse_btn.grid_remove()
+            self.disk_frame.grid()
+            
+        self.target_path.set("")
+        self._update_file_info()
+    
+    def _on_mode_change(self):
+        """Обробка зміни режиму роботи (legacy support)"""
+        mode = self.operation_mode.get()
+        
+        # Update segmented button
+        mode_text_map = {"file": "File", "folder": "Folder", "disk": "Disk"}
+        self.mode_segmented.set(mode_text_map.get(mode, "File"))
     def _setup_drag_drop(self):
         """Налаштування drag & drop"""
         self.target_entry.bind("<ButtonRelease-1>", lambda e: self._browse_target())
@@ -746,6 +798,21 @@ class SecureWipePro(ctk.CTk):
         else:
             self.size_label.configure(text="Розмір: --")
     
+
+    def _count_files_in_folder(self, folder_path):
+        """Count files in folder recursively"""
+        count = 0
+        total_size = 0
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if os.path.exists(file_path) and os.path.isfile(file_path):
+                    count += 1
+                    try:
+                        total_size += os.path.getsize(file_path)
+                    except:
+                        pass
+        return count, total_size
     def _format_size(self, size_bytes: int) -> str:
         """Форматування розміру"""
         for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
