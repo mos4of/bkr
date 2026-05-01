@@ -15,7 +15,7 @@ import sys
 import time
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable
@@ -169,8 +169,8 @@ class SecureWipePro(ctk.CTk):
         super().__init__()
         
         self.title("🔒 SecureWipe Pro")
-        self.geometry("950x700")
-        self.minsize(950, 700)
+        self.geometry("960x650")
+        self.minsize(960, 650)
         self.configure(fg_color=COLORS['bg_main'])
         
         # Змінні стану
@@ -209,7 +209,7 @@ class SecureWipePro(ctk.CTk):
         main_container = ctk.CTkFrame(self, fg_color="transparent")
         main_container.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         main_container.grid_columnconfigure(0, weight=1)
-        main_container.grid_columnconfigure(1, weight=1)
+        main_container.grid_columnconfigure(1, weight=2)
         main_container.grid_rowconfigure(1, weight=1)
         
         # Заголовок
@@ -237,7 +237,7 @@ class SecureWipePro(ctk.CTk):
         )
         theme_btn.grid(row=0, column=1, sticky="e")
         
-        # Ліва панель - Методи та Режими
+        # Ліва панель - Методи
         left_panel = ctk.CTkFrame(
             main_container,
             fg_color=COLORS['bg_card'],
@@ -247,7 +247,6 @@ class SecureWipePro(ctk.CTk):
         left_panel.grid_columnconfigure(0, weight=1)
         
         self._create_method_panel(left_panel)
-        self._create_mode_panel(left_panel)
         
         # Права панель - Статус
         right_panel = ctk.CTkFrame(
@@ -343,22 +342,11 @@ class SecureWipePro(ctk.CTk):
             
             self.method_radios.append(radio)
     
-    def _create_mode_panel(self, parent):
-        """Панель вибору режиму роботи з CTkSegmentedButton"""
-        # Розділювач
-        separator = ctk.CTkFrame(parent, height=2, fg_color=COLORS['text_sub'])
-        separator.grid(row=5, column=0, padx=20, pady=(10, 15), sticky="ew")
+    def _create_status_panel(self, parent):
+        """Панель статусу"""
+        parent.grid_columnconfigure(0, weight=1)
         
-        # Заголовок
-        label = ctk.CTkLabel(
-            parent,
-            text="РЕЖИМ РОБОТИ",
-            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
-            text_color=COLORS['text_sub']
-        )
-        label.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="w")
-        
-        # Segmented button for mode switching
+        # Mode switcher at the top of status panel
         self.mode_segmented = ctk.CTkSegmentedButton(
             parent,
             values=["File", "Folder", "Disk"],
@@ -372,7 +360,7 @@ class SecureWipePro(ctk.CTk):
             unselected_hover_color=COLORS['accent_blue'],
             command=self._on_segmented_mode_change
         )
-        self.mode_segmented.grid(row=7, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.mode_segmented.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="ew")
         self.mode_segmented.set("File")  # Default
         
         # Description label
@@ -382,11 +370,11 @@ class SecureWipePro(ctk.CTk):
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=COLORS['text_sub']
         )
-        self.mode_desc_label.grid(row=8, column=0, padx=20, pady=(0, 10), sticky="w")
-    
-    def _create_status_panel(self, parent):
-        """Панель статусу"""
-        parent.grid_columnconfigure(0, weight=1)
+        self.mode_desc_label.grid(row=1, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Separator
+        separator = ctk.CTkFrame(parent, height=2, fg_color=COLORS['text_sub'])
+        separator.grid(row=2, column=0, padx=20, pady=(0, 15), sticky="ew")
         
         # Заголовок
         label = ctk.CTkLabel(
@@ -395,11 +383,11 @@ class SecureWipePro(ctk.CTk):
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             text_color=COLORS['text_sub']
         )
-        label.grid(row=0, column=0, padx=20, pady=(20, 15), sticky="w")
+        label.grid(row=3, column=0, padx=20, pady=(0, 15), sticky="w")
         
         # Ціль або Диск
         target_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        target_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
+        target_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
         target_frame.grid_columnconfigure(0, weight=1)
         
         self.target_label = ctk.CTkLabel(
@@ -433,13 +421,12 @@ class SecureWipePro(ctk.CTk):
         
         # Диски (спочатку приховано)
         self.disk_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self.disk_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.disk_frame.grid(row=5, column=0, padx=20, pady=(0, 10), sticky="ew")
         self.disk_frame.grid_columnconfigure(0, weight=1)
-        self.disk_frame.grid_remove()  # Приховуємо
         
         disk_label = ctk.CTkLabel(
             self.disk_frame,
-            text="Диск:",
+            text="Виберіть диск для очищення:",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=COLORS['text_sub']
         )
@@ -448,20 +435,30 @@ class SecureWipePro(ctk.CTk):
         # Отримуємо список дисків
         drives = WipeEngine.get_available_drives()
         if not drives:
-            drives = ["C:\\", "D:\\"]
+            drives = ["C:\\", "D:\\", "E:\\"]
+        
+        # Add option to enter custom path
+        drives_with_custom = drives + ["Інший диск..."]
         
         self.disk_combo = ctk.CTkComboBox(
             self.disk_frame,
-            values=drives,
+            values=drives_with_custom,
             variable=self.selected_drive,
             font=ctk.CTkFont(family="Segoe UI", size=12),
-            height=35
+            height=35,
+            command=self._on_disk_selected
         )
         self.disk_combo.grid(row=1, column=0, sticky="ew", pady=(5, 0))
         
+        if drives:
+            self.disk_combo.set(drives[0])
+            self.selected_drive.set(drives[0])
+        
+        self.disk_frame.grid_remove()  # Приховуємо
+        
         # Інформація про файл/папку
         self.info_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self.info_frame.grid(row=3, column=0, padx=20, pady=(10, 10), sticky="ew")
+        self.info_frame.grid(row=6, column=0, padx=20, pady=(10, 10), sticky="ew")
         self.info_frame.grid_columnconfigure(0, weight=1)
         
         self.size_label = ctk.CTkLabel(
@@ -482,7 +479,7 @@ class SecureWipePro(ctk.CTk):
         
         # Прогрес
         progress_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        progress_frame.grid(row=4, column=0, padx=20, pady=(10, 20), sticky="ew")
+        progress_frame.grid(row=7, column=0, padx=20, pady=(10, 20), sticky="ew")
         progress_frame.grid_columnconfigure(0, weight=1)
         
         self.progress_bar = ctk.CTkProgressBar(
@@ -510,7 +507,7 @@ class SecureWipePro(ctk.CTk):
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=COLORS['text_sub']
         )
-        self.details_label.grid(row=5, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.details_label.grid(row=8, column=0, padx=20, pady=(0, 20), sticky="w")
     
     def _create_action_buttons(self, parent):
         """Кнопки дій"""
@@ -598,17 +595,65 @@ class SecureWipePro(ctk.CTk):
             self.target_entry.grid_remove()
             self.browse_btn.grid_remove()
             self.disk_frame.grid()
+            # Show disk info
+            self._update_disk_info()
             
         self.target_path.set("")
         self._update_file_info()
     
-    def _on_mode_change(self):
-        """Обробка зміни режиму роботи (legacy support)"""
-        mode = self.operation_mode.get()
+    def _on_disk_selected(self, choice):
+        """Handle disk selection from combo box"""
+        if choice == "Інший диск...":
+            # Ask user to enter custom disk path
+            custom_path = simpledialog.askstring(
+                "Вибір диска",
+                "Введіть шлях до диска (наприклад, E:\\):",
+                parent=self
+            )
+            if custom_path:
+                # Normalize path
+                if not custom_path.endswith('\\'):
+                    custom_path = custom_path.rstrip('\\') + '\\'
+                
+                # Add to combo box if not already there
+                current_values = list(self.disk_combo.cget("values"))
+                if custom_path not in current_values:
+                    current_values.insert(-1, custom_path)
+                    self.disk_combo.configure(values=current_values)
+                self.disk_combo.set(custom_path)
+                self.selected_drive.set(custom_path)
+                
+                # Show free space
+                self._update_disk_info(custom_path)
+            else:
+                # Reset to first drive
+                drives = WipeEngine.get_available_drives()
+                if drives:
+                    self.disk_combo.set(drives[0])
+                    self.selected_drive.set(drives[0])
+        else:
+            self.selected_drive.set(choice)
+            self._update_disk_info(choice)
+    
+    def _update_disk_info(self, drive_path=None):
+        """Update disk free space info"""
+        if drive_path is None:
+            drive_path = self.selected_drive.get()
         
-        # Update segmented button
-        mode_text_map = {"file": "File", "folder": "Folder", "disk": "Disk"}
-        self.mode_segmented.set(mode_text_map.get(mode, "File"))
+        if drive_path and os.path.exists(drive_path):
+            try:
+                import shutil
+                total, used, free = shutil.disk_usage(drive_path)
+                free_gb = free / (1024**3)
+                total_gb = total / (1024**3)
+                self.size_label.configure(text=f"Вільно: {free_gb:.2f} GB з {total_gb:.2f} GB")
+                self.status_label.configure(text=f"Диск {drive_path} готовий до очищення")
+            except Exception as e:
+                self.size_label.configure(text="Помилка читання диска")
+                self.status_label.configure(text="Помилка")
+        else:
+            self.size_label.configure(text="Диск не знайдено")
+            self.status_label.configure(text="Помилка")
     
     def _setup_drag_drop(self):
         """Налаштування drag & drop"""
@@ -712,7 +757,7 @@ class SecureWipePro(ctk.CTk):
                 
                 self.target_path.set(test_file)
                 self.operation_mode.set("file")
-                self._on_mode_change()
+                self._on_segmented_mode_change("File")
                 self._update_file_info()
                 
                 print(f"✓ Тестовий файл створено: {test_file}\n")
@@ -738,6 +783,9 @@ class SecureWipePro(ctk.CTk):
             target = self.selected_drive.get()
             if not target:
                 messagebox.showwarning("Увага", "Виберіть диск!")
+                return
+            if not os.path.exists(target):
+                messagebox.showerror("Помилка", f"Диск не знайдено: {target}")
                 return
         else:
             target = self.target_path.get()
