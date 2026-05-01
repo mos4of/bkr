@@ -3,6 +3,11 @@
 SecureWipe Pro v1.0
 Сучасний інструмент безпечного знищення даних
 Для демонстрації БКР на тему «Безпечне виведення з експлуатації технічних засобів»
+
+Режими роботи:
+- РЕЖИМ 1: Файл (знищити один файл)
+- РЕЖИМ 2: Папка (рекурсивно знищити всі файли в папці)
+- РЕЖИМ 3: Диск (заповнити вільний простір)
 """
 
 import os
@@ -164,13 +169,15 @@ class SecureWipePro(ctk.CTk):
         super().__init__()
         
         self.title("🔒 SecureWipe Pro")
-        self.geometry("900x650")
-        self.minsize(900, 650)
+        self.geometry("950x700")
+        self.minsize(950, 700)
         self.configure(fg_color=COLORS['bg_main'])
         
         # Змінні стану
         self.selected_method = tk.StringVar(value="dod")
+        self.operation_mode = tk.StringVar(value="file")  # file, folder, disk
         self.target_path = tk.StringVar()
+        self.selected_drive = tk.StringVar()
         self.engine = None
         self.operation_thread = None
         self.current_operation = None
@@ -230,7 +237,7 @@ class SecureWipePro(ctk.CTk):
         )
         theme_btn.grid(row=0, column=1, sticky="e")
         
-        # Ліва панель - Методи
+        # Ліва панель - Методи та Режими
         left_panel = ctk.CTkFrame(
             main_container,
             fg_color=COLORS['bg_card'],
@@ -240,6 +247,7 @@ class SecureWipePro(ctk.CTk):
         left_panel.grid_columnconfigure(0, weight=1)
         
         self._create_method_panel(left_panel)
+        self._create_mode_panel(left_panel)
         
         # Права панель - Статус
         right_panel = ctk.CTkFrame(
@@ -258,6 +266,7 @@ class SecureWipePro(ctk.CTk):
         bottom_panel.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(20, 0))
         bottom_panel.grid_columnconfigure(0, weight=1)
         bottom_panel.grid_columnconfigure(1, weight=1)
+        bottom_panel.grid_columnconfigure(2, weight=1)
         
         self._create_action_buttons(bottom_panel)
         
@@ -333,10 +342,54 @@ class SecureWipePro(ctk.CTk):
             desc_label.grid(row=1, column=0, sticky="w", padx=(25, 0))
             
             self.method_radios.append(radio)
+    
+    def _create_mode_panel(self, parent):
+        """Панель вибору режиму роботи"""
+        # Розділювач
+        separator = ctk.CTkFrame(parent, height=2, fg_color=COLORS['text_sub'])
+        separator.grid(row=5, column=0, padx=20, pady=(10, 15), sticky="ew")
         
-        # Заповнювач
-        spacer = ctk.CTkFrame(parent, fg_color="transparent")
-        spacer.grid(row=5, column=0, sticky="ew")
+        # Заголовок
+        label = ctk.CTkLabel(
+            parent,
+            text="РЕЖИМ РОБОТИ",
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            text_color=COLORS['text_sub']
+        )
+        label.grid(row=6, column=0, padx=20, pady=(0, 15), sticky="w")
+        
+        # Режими
+        modes = [
+            ("file", "📄 Файл", "Знищити один файл"),
+            ("folder", "📁 Папка", "Рекурсивно всі файли в папці"),
+            ("disk", "💾 Диск", "Заповнити вільний простір")
+        ]
+        
+        for i, (value, text, desc) in enumerate(modes):
+            frame = ctk.CTkFrame(parent, fg_color="transparent")
+            frame.grid(row=7+i, column=0, padx=20, pady=(0, 10), sticky="ew")
+            frame.grid_columnconfigure(0, weight=1)
+            
+            radio = ctk.CTkRadioButton(
+                frame,
+                text=text,
+                variable=self.operation_mode,
+                value=value,
+                font=ctk.CTkFont(family="Segoe UI", size=14),
+                text_color=COLORS['text_main'],
+                fg_color=COLORS['accent_blue'],
+                hover_color=COLORS['accent_blue'],
+                command=self._on_mode_change
+            )
+            radio.grid(row=0, column=0, sticky="w")
+            
+            desc_label = ctk.CTkLabel(
+                frame,
+                text=desc,
+                font=ctk.CTkFont(family="Segoe UI", size=11),
+                text_color=COLORS['text_sub']
+            )
+            desc_label.grid(row=1, column=0, sticky="w", padx=(25, 0))
     
     def _create_status_panel(self, parent):
         """Панель статусу"""
@@ -351,18 +404,18 @@ class SecureWipePro(ctk.CTk):
         )
         label.grid(row=0, column=0, padx=20, pady=(20, 15), sticky="w")
         
-        # Ціль
+        # Ціль або Диск
         target_frame = ctk.CTkFrame(parent, fg_color="transparent")
         target_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
         target_frame.grid_columnconfigure(0, weight=1)
         
-        target_label = ctk.CTkLabel(
+        self.target_label = ctk.CTkLabel(
             target_frame,
             text="Ціль:",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color=COLORS['text_sub']
         )
-        target_label.grid(row=0, column=0, sticky="w")
+        self.target_label.grid(row=0, column=0, sticky="w")
         
         self.target_entry = ctk.CTkEntry(
             target_frame,
@@ -373,7 +426,7 @@ class SecureWipePro(ctk.CTk):
         )
         self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
         
-        browse_btn = ctk.CTkButton(
+        self.browse_btn = ctk.CTkButton(
             target_frame,
             text="📁",
             width=35,
@@ -381,13 +434,41 @@ class SecureWipePro(ctk.CTk):
             corner_radius=8,
             fg_color=COLORS['bg_card'],
             hover_color=COLORS['accent_blue'],
-            command=self._browse_file
+            command=self._browse_target
         )
-        browse_btn.grid(row=1, column=1, padx=(5, 0))
+        self.browse_btn.grid(row=1, column=1, padx=(5, 0))
         
-        # Інформація про файл
+        # Диски (спочатку приховано)
+        self.disk_frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.disk_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.disk_frame.grid_columnconfigure(0, weight=1)
+        self.disk_frame.grid_remove()  # Приховуємо
+        
+        disk_label = ctk.CTkLabel(
+            self.disk_frame,
+            text="Диск:",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=COLORS['text_sub']
+        )
+        disk_label.grid(row=0, column=0, sticky="w")
+        
+        # Отримуємо список дисків
+        drives = WipeEngine.get_available_drives()
+        if not drives:
+            drives = ["C:\\", "D:\\"]
+        
+        self.disk_combo = ctk.CTkComboBox(
+            self.disk_frame,
+            values=drives,
+            variable=self.selected_drive,
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            height=35
+        )
+        self.disk_combo.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        
+        # Інформація про файл/папку
         self.info_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        self.info_frame.grid(row=2, column=0, padx=20, pady=(10, 10), sticky="ew")
+        self.info_frame.grid(row=3, column=0, padx=20, pady=(10, 10), sticky="ew")
         self.info_frame.grid_columnconfigure(0, weight=1)
         
         self.size_label = ctk.CTkLabel(
@@ -408,7 +489,7 @@ class SecureWipePro(ctk.CTk):
         
         # Прогрес
         progress_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        progress_frame.grid(row=3, column=0, padx=20, pady=(10, 20), sticky="ew")
+        progress_frame.grid(row=4, column=0, padx=20, pady=(10, 20), sticky="ew")
         progress_frame.grid_columnconfigure(0, weight=1)
         
         self.progress_bar = ctk.CTkProgressBar(
@@ -436,12 +517,13 @@ class SecureWipePro(ctk.CTk):
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=COLORS['text_sub']
         )
-        self.details_label.grid(row=4, column=0, padx=20, pady=(0, 20), sticky="w")
+        self.details_label.grid(row=5, column=0, padx=20, pady=(0, 20), sticky="w")
     
     def _create_action_buttons(self, parent):
         """Кнопки дій"""
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_columnconfigure(1, weight=1)
+        parent.grid_columnconfigure(2, weight=1)
         
         # Кнопка Test Mode
         test_btn = ctk.CTkButton(
@@ -467,11 +549,54 @@ class SecureWipePro(ctk.CTk):
             hover_color=COLORS['accent_red_hover'],
             command=self._start_wipe
         )
-        self.wipe_btn.grid(row=0, column=1, padx=(10, 0), sticky="ew")
+        self.wipe_btn.grid(row=0, column=1, padx=(10, 10), sticky="ew")
+        
+        # Кнопка Clean Artifacts (Windows only)
+        if os.name == 'nt':
+            clean_btn = ctk.CTkButton(
+                parent,
+                text="🧹 Очистити сліди",
+                font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+                height=50,
+                corner_radius=12,
+                fg_color=COLORS['bg_card'],
+                hover_color=COLORS['accent_blue'],
+                command=self._clean_artifacts
+            )
+            clean_btn.grid(row=0, column=2, padx=(10, 0), sticky="ew")
+    
+    def _on_mode_change(self):
+        """Обробка зміни режиму роботи"""
+        mode = self.operation_mode.get()
+        
+        if mode == "file":
+            self.target_label.configure(text="Ціль:")
+            self.target_entry.configure(placeholder_text="Перетягніть файл або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_file)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "folder":
+            self.target_label.configure(text="Папка:")
+            self.target_entry.configure(placeholder_text="Виберіть папку або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_folder)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "disk":
+            self.target_label.configure(text="Диск:")
+            self.target_entry.grid_remove()
+            self.browse_btn.grid_remove()
+            self.disk_frame.grid()
+            
+        self.target_path.set("")
+        self._update_file_info()
     
     def _setup_drag_drop(self):
         """Налаштування drag & drop"""
-        self.target_entry.bind("<ButtonRelease-1>", lambda e: self._browse_file())
+        self.target_entry.bind("<ButtonRelease-1>", lambda e: self._browse_target())
         # Простий drag & drop через вставку з буфера
         self.target_entry.bind("<Button-3>", self._paste_from_clipboard)
     
@@ -485,6 +610,15 @@ class SecureWipePro(ctk.CTk):
         except:
             pass
     
+    def _browse_target(self):
+        """Вибір цілі залежно від режиму"""
+        mode = self.operation_mode.get()
+        if mode == "file":
+            self._browse_file()
+        elif mode == "folder":
+            self._browse_folder()
+        # For disk mode, do nothing (use combo box)
+    
     def _browse_file(self):
         """Вибір файлу через діалог"""
         filename = filedialog.askopenfilename(
@@ -495,13 +629,34 @@ class SecureWipePro(ctk.CTk):
             self.target_path.set(filename)
             self._update_file_info()
     
+    def _browse_folder(self):
+        """Вибір папки через діалог"""
+        folder = filedialog.askdirectory(
+            title="Виберіть папку для знищення"
+        )
+        if folder:
+            self.target_path.set(folder)
+            self._update_file_info()
+    
     def _update_file_info(self):
-        """Оновлення інформації про файл"""
+        """Оновлення інформації про файл/папку"""
         target = self.target_path.get()
+        mode = self.operation_mode.get()
+        
+        if mode == "disk":
+            return
+            
         if target and os.path.exists(target):
-            size = os.path.getsize(target)
-            size_str = self._format_size(size)
-            self.size_label.configure(text=f"Розмір: {size_str}")
+            if mode == "file" and os.path.isfile(target):
+                size = os.path.getsize(target)
+                size_str = self._format_size(size)
+                self.size_label.configure(text=f"Розмір: {size_str}")
+            elif mode == "folder" and os.path.isdir(target):
+                # Count files in folder
+                file_count = sum([len(files) for _, _, files in os.walk(target)])
+                self.size_label.configure(text=f"Файлів: {file_count}")
+            else:
+                self.size_label.configure(text="Розмір: --")
         else:
             self.size_label.configure(text="Розмір: --")
     
@@ -524,6 +679,8 @@ class SecureWipePro(ctk.CTk):
                 test_file = engine.create_test_file("test_data.bin", size_mb=10)
                 
                 self.target_path.set(test_file)
+                self.operation_mode.set("file")
+                self._on_mode_change()
                 self._update_file_info()
                 
                 print(f"✓ Тестовий файл створено: {test_file}\n")
@@ -541,21 +698,25 @@ class SecureWipePro(ctk.CTk):
     
     def _start_wipe(self):
         """Запуск знищення"""
-        target = self.target_path.get()
-        
-        if not target:
-            messagebox.showwarning("Увага", "Виберіть ціль для знищення!")
-            return
-        
-        if not os.path.exists(target):
-            messagebox.showerror("Помилка", f"Шлях не існує:\n{target}")
-            return
-        
-        if not os.path.isfile(target):
-            messagebox.showerror("Помилка", "Це не файл!")
-            return
-        
+        mode = self.operation_mode.get()
         method = self.selected_method.get()
+        
+        # Визначення цілі
+        if mode == "disk":
+            target = self.selected_drive.get()
+            if not target:
+                messagebox.showwarning("Увага", "Виберіть диск!")
+                return
+        else:
+            target = self.target_path.get()
+            
+            if not target:
+                messagebox.showwarning("Увага", "Виберіть ціль для знищення!")
+                return
+            
+            if not os.path.exists(target):
+                messagebox.showerror("Помилка", f"Шлях не існує:\n{target}")
+                return
         
         # Підтвердження
         method_names = {
@@ -565,9 +726,16 @@ class SecureWipePro(ctk.CTk):
             "verify": "Verify only"
         }
         
+        mode_names = {
+            "file": "Файл",
+            "folder": "Папка",
+            "disk": "Диск"
+        }
+        
         confirm = messagebox.askyesno(
             "Підтвердження",
             f"УВАГА: ДАНІ БУДУТЬ ЗНИЩЕНІ БЕЗПОВОРОТНО!\n\n"
+            f"Режим: {mode_names[mode]}\n"
             f"Ціль: {target}\n"
             f"Метод: {method_names[method]}\n\n"
             f"Продовжити?",
@@ -588,32 +756,43 @@ class SecureWipePro(ctk.CTk):
                 )
                 
                 start_time = time.time()
+                result = None
                 
-                if method == "verify":
-                    result = self.engine.verify_wipe(target)
-                    WipeEngine.save_log("Verify only", target, result)
-                else:
-                    # Виконуємо знищення
-                    if method == "zeros":
-                        result = self.engine.wipe_zeros(target)
-                    elif method == "dod":
-                        result = self.engine.wipe_dod(target)
-                    elif method == "gutmann":
-                        result = self.engine.wipe_gutmann(target)
+                if mode == "file":
+                    # Режим 1: Один файл
+                    if method == "verify":
+                        result = self.engine.verify_wipe(target)
+                        WipeEngine.save_log("Verify only", target, result)
+                    else:
+                        if method == "zeros":
+                            result = self.engine.wipe_zeros(target)
+                        elif method == "dod":
+                            result = self.engine.wipe_dod(target)
+                        elif method == "gutmann":
+                            result = self.engine.wipe_gutmann(target)
+                        
+                        # Верифікація
+                        print("\n[ВЕРИФІКАЦІЯ] Перевірка результату...\n")
+                        verify_result = self.engine.verify_wipe(target)
+                        WipeEngine.save_log(method_names[method], target, verify_result)
+                        result = verify_result
+                        
+                elif mode == "folder":
+                    # Режим 2: Папка
+                    result = self.engine.wipe_folder(target, method)
+                    WipeEngine.save_log(f"Folder wipe - {method_names[method]}", 
+                                        target, result)
                     
-                    # Верифікація
-                    print("\n[ВЕРИФІКАЦІЯ] Перевірка результату...\n")
-                    verify_result = self.engine.verify_wipe(target)
-                    
-                    # Логування
-                    WipeEngine.save_log(method_names[method], target, verify_result)
-                    
-                    result = verify_result
+                elif mode == "disk":
+                    # Режим 3: Диск
+                    result = self.engine.wipe_free_space(target, method)
+                    WipeEngine.save_log(f"Disk wipe - {method}", 
+                                        target, result)
                 
                 # Завершення
                 duration = time.time() - start_time
                 
-                self.after(0, lambda: self._operation_complete(result))
+                self.after(0, lambda: self._operation_complete(result, mode))
                 
             except Exception as e:
                 print(f"\nПОМИЛКА: {e}\n")
@@ -631,32 +810,109 @@ class SecureWipePro(ctk.CTk):
             self.progress_bar.set(progress / 100)
             self.progress_label.configure(text=f"{progress:.1f}%")
             
-            speed = self._format_size(bytes_done / max(1, time.time() - start_time)) + "/s"
-            self.details_label.configure(
-                text=f"Pass {current_pass}/{total_passes} | {description} | {speed}"
-            )
+            mode = self.operation_mode.get()
+            
+            if mode == "disk":
+                filled_gb = bytes_done / (1024**3)
+                total_gb = total_bytes / (1024**3)
+                speed = ""
+                if hasattr(self, '_last_progress_time'):
+                    elapsed = time.time() - self._last_progress_time
+                    if elapsed > 0:
+                        speed = f" | {filled_gb/elapsed:.1f} GB/s"
+                self.details_label.configure(
+                    text=f"Заповнено {filled_gb:.1f} GB з {total_gb:.1f} GB{speed}"
+                )
+                self._last_progress_time = time.time()
+            else:
+                speed = self._format_size(bytes_done / max(1, time.time() - start_time)) + "/s"
+                self.details_label.configure(
+                    text=f"Pass {current_pass}/{total_passes} | {description} | {speed}"
+                )
         
         start_time = time.time()
         self.after(0, update)
     
-    def _operation_complete(self, result: dict):
+    def _operation_complete(self, result: dict, mode: str):
         """Завершення операції"""
         self.wipe_btn.configure(state="normal", text="🗑️ START WIPE")
         self.progress_bar.set(1.0)
         self.progress_label.configure(text="100%")
         
-        if result.get('success'):
-            self._set_status("Знищення завершено успішно ✓", COLORS['accent_green'])
-            messagebox.showinfo("Успіх", "Операцію завершено успішно!")
-        else:
-            self._set_status("Помилка або неповне знищення", COLORS['accent_red'])
-            messagebox.showwarning("Увага", "Верифікація виявила проблеми!")
+        # Показуємо статистику
+        stats_msg = ""
+        
+        if mode == "file":
+            if result.get('success'):
+                stats_msg = f"✓ Файл знищено успішно!"
+            else:
+                stats_msg = f"✗ Помилка або неповне знищення"
+                
+        elif mode == "folder":
+            wiped = result.get('wiped_files', 0)
+            total = result.get('total_files', 0)
+            size = self._format_size(result.get('total_size', 0))
+            stats_msg = f"✓ Знищено файлів: {wiped} з {total}\n"
+            stats_msg += f"  Загальний розмір: {size}"
+            
+        elif mode == "disk":
+            filled_gb = result.get('total_space_filled', 0) / (1024**3)
+            files_created = result.get('temp_files_created', 0)
+            stats_msg = f"✓ Заповнено: {filled_gb:.2f} GB\n"
+            stats_msg += f"  Створено файлів: {files_created}"
+        
+        self._set_status("Операцію завершено", COLORS['accent_green'])
+        messagebox.showinfo("Результат", stats_msg)
     
     def _operation_error(self, error_msg: str):
         """Помилка операції"""
         self.wipe_btn.configure(state="normal", text="🗑️ START WIPE")
         self._set_status("Помилка", COLORS['accent_red'])
         messagebox.showerror("Помилка", error_msg)
+    
+    def _clean_artifacts(self):
+        """Очищення артефактів Windows"""
+        confirm = messagebox.askyesno(
+            "Очищення слідів",
+            "Очистити артефакти Windows?\n\n"
+            "Це видалить:\n"
+            "• Кошик (Recycle Bin)\n"
+            "• Prefetch файли\n"
+            "• Recent files\n"
+            "• Thumbnail cache\n"
+            "• Тіньові копії (потрібні права адміна)\n\n"
+            "Продовжити?",
+            icon='warning'
+        )
+        
+        if not confirm:
+            return
+        
+        def worker():
+            try:
+                self._set_status("Очищення слідів Windows...", COLORS['accent_blue'])
+                print("\n[АРТЕФАКТИ] Очищення...\n")
+                
+                engine = WipeEngine()
+                result = engine.clean_windows_artifacts()
+                
+                self.after(0, lambda: self._artifacts_complete(result))
+                
+            except Exception as e:
+                print(f"\nПОМИЛКА: {e}\n")
+                self.after(0, lambda: self._set_status("Помилка", COLORS['accent_red']))
+        
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+    
+    def _artifacts_complete(self, result: dict):
+        """Завершення очищення артефактів"""
+        if result.get('success'):
+            self._set_status("Артефакти очищено ✓", COLORS['accent_green'])
+            messagebox.showinfo("Успіх", "Артефакти Windows очищено!")
+        else:
+            self._set_status("Помилка очищення", COLORS['accent_red'])
+            messagebox.showwarning("Увага", "Деякі операції не виконані.\nМожливо, потрібні права адміністратора.")
     
     def _set_status(self, text: str, color: str):
         """Оновлення статусу"""

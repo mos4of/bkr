@@ -298,4 +298,374 @@ Duration: {result.get('duration', 0):.2f} sec
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(log_entry)
         
-        return str(log_file)
+        return str(log_file)    
+    def wipe_folder(self, folder_path: str, method: str = "dod") -> Dict:
+        """
+        Mode 2: Wipe all files in folder recursively
+        
+        Args:
+            folder_path: Path to folder
+            method: Wiping method (zeros, dod, gutmann)
+        
+        Returns:
+            Dictionary with results
+        """
+        self._cancelled = False
+        start_time = time.time()
+        
+        results = {
+            'total_files': 0,
+            'wiped_files': 0,
+            'failed_files': 0,
+            'total_size': 0,
+            'errors': []
+        }
+        
+        try:
+            # Collect all files
+            all_files = []
+            for root, dirs, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
+                        all_files.append(file_path)
+            
+            results['total_files'] = len(all_files)
+            
+            if self.progress_callback:
+                self.progress_callback(0, 1, "Scanning folder", 0, 0, 0)
+            
+            print(f"\n[ПАПКА] Знайдено файлів: {len(all_files)}\n")
+            
+            # Wipe each file
+            for idx, file_path in enumerate(all_files, 1):
+                if self._cancelled:
+                    results['status'] = 'CANCELLED'
+                    return results
+                
+                try:
+                    file_size = os.path.getsize(file_path)
+                    results['total_size'] += file_size
+                    
+                    print(f"Файл {idx} з {len(all_files)}: {os.path.basename(file_path)}")
+                    
+                    # Select wipe method
+                    if method == "zeros":
+                        wipe_func = self.wipe_zeros
+                    elif method == "gutmann":
+                        wipe_func = self.wipe_gutmann
+                    else:  # dod
+                        wipe_func = self.wipe_dod
+                    
+                    # Wipe file
+                    wipe_result = wipe_func(file_path)
+                    
+                    if wipe_result.get('success'):
+                        results['wiped_files'] += 1
+                    else:
+                        results['failed_files'] += 1
+                        
+                except Exception as e:
+                    results['failed_files'] += 1
+                    results['errors'].append(f"{file_path}: {str(e)}")
+                    print(f"ПОМИЛКА: {e}")
+                
+                # Update progress
+                if self.progress_callback:
+                    progress = (idx / len(all_files)) * 100
+                    self.progress_callback(
+                        idx, len(all_files), f"File {idx}/{len(all_files)}",
+                        progress, idx, len(all_files)
+                    )
+            
+            # Remove empty directories
+            print(f"\n[ПАПКА] Видалення порожніх папок...")
+            self._remove_empty_dirs(folder_path)
+            
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['status'] = 'SUCCESS'
+            results['success'] = results['failed_files'] == 0
+            
+            print(f"\n[ПАПКА] Завершено!")
+            print(f"  Знищено файлів: {results['wiped_files']}")
+            print(f"  Загальний розмір: {self._format_size(results['total_size'])}")
+            print(f"  Час: {duration:.2f} сек.\n")
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['status'] = 'ERROR'
+            results['error'] = str(e)
+            results['success'] = False
+            
+        return results
+    
+    def wipe_free_space(self, drive_letter: str, method: str = "zeros") -> Dict:
+        """
+        Mode 3: Fill free disk space with temp files then delete them
+        
+        Args:
+            drive_letter: Drive letter (e.g., "C:\", "D:\")
+            method: Fill method (zeros or random)
+        
+        Returns:
+            Dictionary with results
+        """
+        self._cancelled = False
+        start_time = time.time()
+        
+        results = {
+            'total_space_filled': 0,
+            'temp_files_created': 0,
+            'errors': []
+        }
+        
+        try:
+            import shutil
+            
+            # Get free space
+            total, used, free = shutil.disk_usage(drive_letter)
+            free_gb = free / (1024**3)
+            
+            print(f"\n[ВІЛЬНИЙ ПРОСТІР] Диск: {drive_letter}")
+            print(f"  Вільно: {free_gb:.2f} GB")
+            print(f"  Метод: {method}\n")
+            
+            if self.progress_callback:
+                self.progress_callback(0, 1, "Checking free space", 0, 0, free)
+            
+            temp_dir = os.path.join(drive_letter, "temp_wipe_secure")
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            temp_files = []
+            bytes_written = 0
+            file_counter = 0
+            
+            # Fill free space
+            while True:
+                if self._cancelled:
+                    results['status'] = 'CANCELLED'
+                    break
+                
+                try:
+                    # Check if still free space
+                    _, _, free = shutil.disk_usage(drive_letter)
+                    if free < 1024 * 1024:  # Less than 1MB free
+                        break
+                    
+                    # Create temp file (100MB chunks)
+                    file_counter += 1
+                    temp_file = os.path.join(temp_dir, f"temp_{file_counter}.bin")
+                    temp_files.append(temp_file)
+                    
+                    with open(temp_file, 'wb') as f:
+                        chunk_size = 100 * 1024 * 1024  # 100MB
+                        block = b'\x00' * self.block_size if method == "zeros" else os.urandom(self.block_size)
+                        
+                        written = 0
+                        while written < chunk_size:
+                            if self._cancelled:
+                                break
+                            
+                            remaining = min(self.block_size, chunk_size - written)
+                            f.write(block[:remaining])
+                            written += remaining
+                            bytes_written += remaining
+                            
+                            # Update progress every 10MB
+                            if written % (10 * 1024 * 1024) == 0:
+                                if self.progress_callback:
+                                    filled_gb = bytes_written / (1024**3)
+                                    progress = (filled_gb / free_gb) * 100 if free_gb > 0 else 0
+                                    self.progress_callback(
+                                        int(filled_gb), int(free_gb), f"Filled {filled_gb:.1f} GB",
+                                        progress, bytes_written, free
+                                    )
+                    
+                    results['temp_files_created'] += 1
+                    
+                    # Update progress
+                    filled_gb = bytes_written / (1024**3)
+                    if self.progress_callback:
+                        progress = (filled_gb / free_gb) * 100 if free_gb > 0 else 0
+                        self.progress_callback(
+                            int(filled_gb), int(free_gb), f"Filled {filled_gb:.1f} GB",
+                            min(progress, 100), bytes_written, free
+                        )
+                    
+                    print(f"Заповнено {filled_gb:.2f} GB з {free_gb:.2f} GB")
+                    
+                except OSError as e:
+                    # Disk full - that's what we want
+                    if "No space left" in str(e) or "disk full" in str(e).lower():
+                        break
+                    else:
+                        results['errors'].append(str(e))
+                        break
+            
+            # Delete temp files
+            print(f"\n[ВІЛЬНИЙ ПРОСТІР] Видалення тимчасових файлів...")
+            for temp_file in temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                except Exception as e:
+                    results['errors'].append(f"Delete {temp_file}: {str(e)}")
+            
+            # Remove temp directory
+            try:
+                if os.path.exists(temp_dir):
+                    os.rmdir(temp_dir)
+            except:
+                pass
+            
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['total_space_filled'] = bytes_written
+            results['status'] = 'SUCCESS'
+            results['success'] = True
+            
+            filled_gb = bytes_written / (1024**3)
+            print(f"\n[ВІЛЬНИЙ ПРОСТІР] Завершено!")
+            print(f"  Заповнено: {filled_gb:.2f} GB")
+            print(f"  Створено файлів: {results['temp_files_created']}")
+            print(f"  Час: {duration:.2f} сек.\n")
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['status'] = 'ERROR'
+            results['error'] = str(e)
+            results['success'] = False
+            
+        return results
+    
+    def clean_windows_artifacts(self) -> Dict:
+        """
+        Clean Windows artifacts (Recycle Bin, Prefetch, Recent, etc.)
+        Requires admin rights for some operations
+        
+        Returns:
+            Dictionary with results
+        """
+        import subprocess
+        
+        results = {
+            'operations': [],
+            'success_count': 0,
+            'failed_count': 0
+        }
+        
+        if os.name != 'nt':
+            results['error'] = 'Windows only feature'
+            return results
+        
+        print(f"\n[АРТЕФАКТИ] Очищення слідів Windows...\n")
+        
+        operations = [
+            {
+                'name': 'Recycle Bin',
+                'cmd': 'powershell.exe -Command "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"',
+                'admin_required': False
+            },
+            {
+                'name': 'Prefetch',
+                'cmd': 'del /q C:\\Windows\Prefetch\* 2>nul',
+                'admin_required': True
+            },
+            {
+                'name': 'Recent Files',
+                'cmd': f'del /q "%APPDATA%\Microsoft\Windows\Recent\*" 2>nul',
+                'admin_required': False
+            },
+            {
+                'name': 'Thumbnail Cache',
+                'cmd': f'del /q "%LOCALAPPDATA%\Microsoft\Windows\Explorer\thumbcache_*" 2>nul',
+                'admin_required': False
+            }
+        ]
+        
+        for op in operations:
+            try:
+                print(f"  {op['name']}...", end='')
+                result = subprocess.run(
+                    op['cmd'],
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                
+                if result.returncode == 0:
+                    print(" ✓")
+                    results['success_count'] += 1
+                    results['operations'].append(f"{op['name']}: SUCCESS")
+                else:
+                    print(" ✗")
+                    results['failed_count'] += 1
+                    results['operations'].append(f"{op['name']}: FAILED")
+                    
+            except Exception as e:
+                print(f" ✗ ({e})")
+                results['failed_count'] += 1
+                results['operations'].append(f"{op['name']}: ERROR - {str(e)}")
+        
+        # Try to delete Volume Shadow Copies (requires admin)
+        try:
+            print(f"  Volume Shadow Copies...", end='')
+            result = subprocess.run(
+                'vssadmin delete shadows /all /quiet',
+                shell=True,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                print(" ✓")
+                results['success_count'] += 1
+            else:
+                print(" ✗ (потрібні права адміністратора)")
+                results['failed_count'] += 1
+        except:
+            print(" ✗")
+            results['failed_count'] += 1
+        
+        print(f"\n[АРТЕФАКТИ] Завершено!")
+        print(f"  Успішно: {results['success_count']}")
+        print(f"  Помилок: {results['failed_count']}\n")
+        
+        results['success'] = results['failed_count'] == 0
+        return results
+    
+    def _remove_empty_dirs(self, folder_path: str):
+        """Remove empty directories recursively"""
+        for root, dirs, files in os.walk(folder_path, topdown=False):
+            for dir_name in dirs:
+                dir_path = os.path.join(root, dir_name)
+                try:
+                    if not os.listdir(dir_path):  # Check if empty
+                        os.rmdir(dir_path)
+                        print(f"  Видалено порожню папку: {dir_path}")
+                except:
+                    pass
+    
+    @staticmethod
+    def get_available_drives() -> list:
+        """Get list of available drives (Windows)"""
+        drives = []
+        if os.name == 'nt':
+            import string
+            for letter in string.ascii_uppercase:
+                drive = f"{letter}:\\"
+                if os.path.exists(drive):
+                    drives.append(drive)
+        return drives
+    
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        """Format size to human readable"""
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f} PB"
+
