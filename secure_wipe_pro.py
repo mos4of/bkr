@@ -344,7 +344,7 @@ class SecureWipePro(ctk.CTk):
             self.method_radios.append(radio)
     
     def _create_mode_panel(self, parent):
-        """Панель вибору режиму роботи"""
+        """Панель вибору режиму роботи з CTkSegmentedButton"""
         # Розділювач
         separator = ctk.CTkFrame(parent, height=2, fg_color=COLORS['text_sub'])
         separator.grid(row=5, column=0, padx=20, pady=(10, 15), sticky="ew")
@@ -356,40 +356,33 @@ class SecureWipePro(ctk.CTk):
             font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
             text_color=COLORS['text_sub']
         )
-        label.grid(row=6, column=0, padx=20, pady=(0, 15), sticky="w")
+        label.grid(row=6, column=0, padx=20, pady=(0, 10), sticky="w")
         
-        # Режими
-        modes = [
-            ("file", "📄 Файл", "Знищити один файл"),
-            ("folder", "📁 Папка", "Рекурсивно всі файли в папці"),
-            ("disk", "💾 Диск", "Заповнити вільний простір")
-        ]
+        # Segmented button for mode switching
+        self.mode_segmented = ctk.CTkSegmentedButton(
+            parent,
+            values=["📄 Файл", "📁 Папка", "💾 Диск"],
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
+            height=40,
+            corner_radius=8,
+            fg_color=COLORS['bg_main'],
+            selected_color=COLORS['accent_blue'],
+            unselected_color=COLORS['bg_card'],
+            text_color=COLORS['text_main'],
+            unselected_hover_color=COLORS['accent_blue'],
+            command=self._on_segmented_mode_change
+        )
+        self.mode_segmented.grid(row=7, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.mode_segmented.set("📄 Файл")  # Default
         
-        for i, (value, text, desc) in enumerate(modes):
-            frame = ctk.CTkFrame(parent, fg_color="transparent")
-            frame.grid(row=7+i, column=0, padx=20, pady=(0, 10), sticky="ew")
-            frame.grid_columnconfigure(0, weight=1)
-            
-            radio = ctk.CTkRadioButton(
-                frame,
-                text=text,
-                variable=self.operation_mode,
-                value=value,
-                font=ctk.CTkFont(family="Segoe UI", size=14),
-                text_color=COLORS['text_main'],
-                fg_color=COLORS['accent_blue'],
-                hover_color=COLORS['accent_blue'],
-                command=self._on_mode_change
-            )
-            radio.grid(row=0, column=0, sticky="w")
-            
-            desc_label = ctk.CTkLabel(
-                frame,
-                text=desc,
-                font=ctk.CTkFont(family="Segoe UI", size=11),
-                text_color=COLORS['text_sub']
-            )
-            desc_label.grid(row=1, column=0, sticky="w", padx=(25, 0))
+        # Description label
+        self.mode_desc_label = ctk.CTkLabel(
+            parent,
+            text="Знищити один файл обраним методом",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=COLORS['text_sub']
+        )
+        self.mode_desc_label.grid(row=8, column=0, padx=20, pady=(0, 10), sticky="w")
     
     def _create_status_panel(self, parent):
         """Панель статусу"""
@@ -565,9 +558,24 @@ class SecureWipePro(ctk.CTk):
             )
             clean_btn.grid(row=0, column=2, padx=(10, 0), sticky="ew")
     
-    def _on_mode_change(self):
-        """Обробка зміни режиму роботи"""
-        mode = self.operation_mode.get()
+    def _on_segmented_mode_change(self, mode_text):
+        """Обробка зміни режиму через segmented button"""
+        # Map text to mode value
+        mode_map = {
+            "📄 Файл": "file",
+            "📁 Папка": "folder",
+            "💾 Диск": "disk"
+        }
+        mode = mode_map.get(mode_text, "file")
+        self.operation_mode.set(mode)
+        
+        # Update description
+        desc_map = {
+            "file": "Знищити один файл обраним методом",
+            "folder": "Рекурсивно знищити всі файли в папці",
+            "disk": "Заповнити вільний простір диска"
+        }
+        self.mode_desc_label.configure(text=desc_map.get(mode, ""))
         
         if mode == "file":
             self.target_label.configure(text="Ціль:")
@@ -594,6 +602,68 @@ class SecureWipePro(ctk.CTk):
         self.target_path.set("")
         self._update_file_info()
     
+    def _on_mode_change(self):
+        """Обробка зміни режиму роботи (legacy support)"""
+        mode = self.operation_mode.get()
+        
+        # Update segmented button
+        mode_text_map = {"file": "📄 Файл", "folder": "📁 Папка", "disk": "💾 Диск"}
+        self.mode_segmented.set(mode_text_map.get(mode, "📄 Файл"))
+
+    
+
+    def _on_segmented_mode_change(self, mode_text):
+        """Обробка зміни режиму через segmented button"""
+        # Map text to mode value
+        mode_map = {
+            "File": "file",
+            "Folder": "folder",
+            "Disk": "disk"
+        }
+        mode = mode_map.get(mode_text, "file")
+        self.operation_mode.set(mode)
+        
+        # Update description
+        desc_map = {
+            "file": "Знищити один файл обраним методом",
+            "folder": "Рекурсивно знищити всі файли в папці",
+            "disk": "Заповнити вільний простір диска"
+        }
+        self.mode_desc_label.configure(text=desc_map.get(mode, ""))
+        
+        if mode == "file":
+            self.target_label.configure(text="Ціль:")
+            self.target_entry.configure(placeholder_text="Перетягніть файл або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_file)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "folder":
+            self.target_label.configure(text="Папка:")
+            self.target_entry.configure(placeholder_text="Виберіть папку або натисніть 📁")
+            self.browse_btn.configure(command=self._browse_folder)
+            self.disk_frame.grid_remove()
+            self.target_entry.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+            self.browse_btn.grid(row=1, column=1, padx=(5, 0))
+            
+        elif mode == "disk":
+            self.target_label.configure(text="Диск:")
+            self.target_entry.grid_remove()
+            self.browse_btn.grid_remove()
+            self.disk_frame.grid()
+            
+        self.target_path.set("")
+        self._update_file_info()
+    
+    def _on_mode_change(self):
+        """Обробка зміни режиму роботи (legacy support)"""
+        mode = self.operation_mode.get()
+        
+        # Update segmented button
+        mode_text_map = {"file": "File", "folder": "Folder", "disk": "Disk"}
+        self.mode_segmented.set(mode_text_map.get(mode, "File"))
+
     def _setup_drag_drop(self):
         """Налаштування drag & drop"""
         self.target_entry.bind("<ButtonRelease-1>", lambda e: self._browse_target())
@@ -637,6 +707,21 @@ class SecureWipePro(ctk.CTk):
         if folder:
             self.target_path.set(folder)
             self._update_file_info()
+            
+    def _count_files_in_folder(self, folder_path):
+        """Count files in folder recursively"""
+        count = 0
+        total_size = 0
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if os.path.exists(file_path) and os.path.isfile(file_path):
+                    count += 1
+                    try:
+                        total_size += os.path.getsize(file_path)
+                    except:
+                        pass
+        return count, total_size
     
     def _update_file_info(self):
         """Оновлення інформації про файл/папку"""
@@ -653,8 +738,9 @@ class SecureWipePro(ctk.CTk):
                 self.size_label.configure(text=f"Розмір: {size_str}")
             elif mode == "folder" and os.path.isdir(target):
                 # Count files in folder
-                file_count = sum([len(files) for _, _, files in os.walk(target)])
-                self.size_label.configure(text=f"Файлів: {file_count}")
+                file_count, total_size = self._count_files_in_folder(target)
+                size_str = self._format_size(total_size)
+                self.size_label.configure(text=f"Знайдено: {file_count} файлів, {size_str}")
             else:
                 self.size_label.configure(text="Розмір: --")
         else:
@@ -760,10 +846,13 @@ class SecureWipePro(ctk.CTk):
                 
                 if mode == "file":
                     # Режим 1: Один файл
+                    method_display = method_names[method]
                     if method == "verify":
-                        result = self.engine.verify_wipe(target)
+                        result = self.engine.verify_wipe(target, method_display)
                         WipeEngine.save_log("Verify only", target, result)
                     else:
+                        file_size = os.path.getsize(target) if os.path.exists(target) else 0
+                        
                         if method == "zeros":
                             result = self.engine.wipe_zeros(target)
                         elif method == "dod":
@@ -773,8 +862,8 @@ class SecureWipePro(ctk.CTk):
                         
                         # Верифікація
                         print("\n[ВЕРИФІКАЦІЯ] Перевірка результату...\n")
-                        verify_result = self.engine.verify_wipe(target)
-                        WipeEngine.save_log(method_names[method], target, verify_result)
+                        verify_result = self.engine.verify_wipe(target, method_display, file_size)
+                        WipeEngine.save_log(method_display, target, verify_result)
                         result = verify_result
                         
                 elif mode == "folder":
@@ -834,35 +923,139 @@ class SecureWipePro(ctk.CTk):
         self.after(0, update)
     
     def _operation_complete(self, result: dict, mode: str):
-        """Завершення операції"""
+        """Завершення операції з модальним діалогом"""
         self.wipe_btn.configure(state="normal", text="🗑️ START WIPE")
         self.progress_bar.set(1.0)
         self.progress_label.configure(text="100%")
         
-        # Показуємо статистику
-        stats_msg = ""
-        
+        # Update status panel with statistics
         if mode == "file":
             if result.get('success'):
-                stats_msg = f"✓ Файл знищено успішно!"
+                self.size_label.configure(text=f"Знищено: {self._format_size(result.get('file_size', 0))}")
+                self._set_status("✓ Знищено успішно", COLORS['accent_green'])
             else:
-                stats_msg = f"✗ Помилка або неповне знищення"
+                self._set_status("✗ Знищення неповне", COLORS['accent_red'])
                 
         elif mode == "folder":
             wiped = result.get('wiped_files', 0)
             total = result.get('total_files', 0)
             size = self._format_size(result.get('total_size', 0))
-            stats_msg = f"✓ Знищено файлів: {wiped} з {total}\n"
-            stats_msg += f"  Загальний розмір: {size}"
+            self.size_label.configure(text=f"Знищено: {wiped} файлів")
+            self._set_status(f"✓ Оброблено {wiped} з {total} файлів", COLORS['accent_green'])
             
         elif mode == "disk":
             filled_gb = result.get('total_space_filled', 0) / (1024**3)
             files_created = result.get('temp_files_created', 0)
-            stats_msg = f"✓ Заповнено: {filled_gb:.2f} GB\n"
-            stats_msg += f"  Створено файлів: {files_created}"
+            self.size_label.configure(text=f"Заповнено: {filled_gb:.2f} GB")
+            self._set_status(f"✓ Диск заповнено ({filled_gb:.2f} GB)", COLORS['accent_green'])
         
-        self._set_status("Операцію завершено", COLORS['accent_green'])
-        messagebox.showinfo("Результат", stats_msg)
+        # Show modal dialog with results
+        self._show_result_dialog(result, mode)
+    
+    def _show_result_dialog(self, result: dict, mode: str):
+        """Показати модальний діалог з результатом"""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Результат операції")
+        dialog.geometry("500x400")
+        dialog.resizable(False, False)
+        dialog.configure(fg_color=COLORS['bg_main'])
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Center on parent
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - (500 // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (400 // 2)
+        dialog.geometry(f"500x400+{x}+{y}")
+        
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+        
+        # Result icon and title
+        success = result.get('success', False)
+        
+        if success:
+            icon_text = "✓"
+            title_text = "ОПЕРАЦІЮ ЗАВЕРШЕНО УСПІШНО"
+            bg_color = COLORS['accent_green']
+        else:
+            icon_text = "✗"
+            title_text = "УВАГА: ЗНИЩЕННЯ НЕПОВНЕ"
+            bg_color = COLORS['accent_red']
+        
+        # Icon
+        icon_label = ctk.CTkLabel(
+            dialog,
+            text=icon_text,
+            font=ctk.CTkFont(size=64),
+            text_color=bg_color
+        )
+        icon_label.grid(row=0, column=0, pady=(30, 10))
+        
+        # Title
+        title_label = ctk.CTkLabel(
+            dialog,
+            text=title_text,
+            font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
+            text_color=bg_color
+        )
+        title_label.grid(row=1, column=0, pady=(0, 20))
+        
+        # Details frame
+        details_frame = ctk.CTkFrame(dialog, fg_color=COLORS['bg_card'], corner_radius=12)
+        details_frame.grid(row=2, column=0, padx=30, pady=(0, 20), sticky="ew")
+        details_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add details based on mode
+        row = 0
+        
+        if mode == "file":
+            details = [
+                f"Метод: {result.get('method_name', 'N/A')}",
+                f"Файл: {self.target_path.get()}",
+                f"Розмір: {self._format_size(result.get('file_size', 0))}",
+                f"Час: {result.get('duration', 0):.2f} сек",
+                f"Надійність: {result.get('clean_percent', 0):.2f}%"
+            ]
+        elif mode == "folder":
+            details = [
+                f"Знищено файлів: {result.get('wiped_files', 0)} з {result.get('total_files', 0)}",
+                f"Загальний розмір: {self._format_size(result.get('total_size', 0))}",
+                f"Час: {result.get('duration', 0):.2f} сек"
+            ]
+        elif mode == "disk":
+            filled_gb = result.get('total_space_filled', 0) / (1024**3)
+            details = [
+                f"Заповнено: {filled_gb:.2f} GB",
+                f"Створено файлів: {result.get('temp_files_created', 0)}",
+                f"Час: {result.get('duration', 0):.2f} сек"
+            ]
+        
+        for detail in details:
+            label = ctk.CTkLabel(
+                details_frame,
+                text=detail,
+                font=ctk.CTkFont(family="Segoe UI", size=12),
+                text_color=COLORS['text_main']
+            )
+            label.grid(row=row, column=0, padx=20, pady=(10 if row == 0 else 5), sticky="w")
+            row += 1
+        
+        # Close button
+        close_btn = ctk.CTkButton(
+            dialog,
+            text="OK",
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            height=40,
+            corner_radius=8,
+            fg_color=bg_color,
+            hover_color=bg_color,
+            command=dialog.destroy
+        )
+        close_btn.grid(row=3, column=0, padx=30, pady=(0, 30))
+        
+        # Auto-close after 10 seconds
+        dialog.after(10000, dialog.destroy)
     
     def _operation_error(self, error_msg: str):
         """Помилка операції"""

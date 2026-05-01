@@ -158,10 +158,15 @@ class WipeEngine:
                 'status': 'ERROR'
             }
     
-    def verify_wipe(self, target_path: str) -> Dict:
+    def verify_wipe(self, target_path: str, method_name: str = "", file_size: int = 0) -> Dict:
         """
         Method 4: Verify wipe result
         Check if all bytes are zeros
+        
+        Args:
+            target_path: Path to file
+            method_name: Name of wiping method used
+            file_size: Original file size (for display)
         
         Returns:
             Dictionary with verification results
@@ -170,13 +175,19 @@ class WipeEngine:
         start_time = time.time()
         
         try:
-            file_size = os.path.getsize(target_path)
+            if not file_size:
+                file_size = os.path.getsize(target_path)
             zeros = b'\x00' * self.block_size
             
             total_blocks = 0
             clean_blocks = 0
             dirty_blocks = 0
             non_zero_bytes = 0
+            
+            print(f"\n[ВЕРИФІКАЦІЯ] Перевірка результату...")
+            print(f"  Файл: {os.path.basename(target_path)}")
+            print(f"  Розмір: {self._format_size(file_size)}")
+            print(f"  Перевірено секторів: ", end='')
             
             with open(target_path, 'rb') as f:
                 bytes_read = 0
@@ -208,6 +219,29 @@ class WipeEngine:
             clean_percent = (clean_blocks / total_blocks * 100) if total_blocks > 0 else 0
             success = dirty_blocks == 0
             
+            # Print complete summary
+            print(f"{total_blocks}")
+            print(f"  Чистих секторів: {clean_blocks} ({clean_percent:.2f}%)")
+            print(f"  Ненульових байт знайдено: {non_zero_bytes}")
+            print(f"{'='*40}")
+            
+            if success:
+                print(f"✓ ЗНИЩЕННЯ УСПІШНЕ")
+                print(f"  Метод: {method_name}")
+                print(f"  Файл: {os.path.basename(target_path)}")
+                print(f"  Розмір: {self._format_size(file_size)}")
+                print(f"  Час виконання: {duration:.2f} сек")
+                print(f"  Надійність: {clean_percent:.2f}%")
+            else:
+                print(f"✗ УВАГА: ЗНИЩЕННЯ НЕПОВНЕ")
+                print(f"  Знайдено відновлювані дані!")
+                print(f"  Ненульових байтів: {non_zero_bytes}")
+                print(f"  Надійність: {clean_percent:.2f}%")
+                if clean_percent < 99.9:
+                    print(f"  Рекомендується повторити операцію!")
+            
+            print(f"{'='*40}\n")
+            
             return {
                 'success': success,
                 'duration': duration,
@@ -216,11 +250,14 @@ class WipeEngine:
                 'dirty_blocks': dirty_blocks,
                 'clean_percent': clean_percent,
                 'non_zero_bytes': non_zero_bytes,
+                'file_size': file_size,
+                'method_name': method_name,
                 'status': 'SUCCESS' if success else 'FAILED'
             }
             
         except Exception as e:
             duration = time.time() - start_time
+            print(f"ПОМИЛКА: {e}")
             return {
                 'success': False,
                 'duration': duration,
