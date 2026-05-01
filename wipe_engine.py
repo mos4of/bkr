@@ -697,6 +697,141 @@ Duration: {result.get('duration', 0):.2f} sec
                     drives.append(drive)
         return drives
     
+
+    def wipe_disk_full(self, drive_letter: str, method: str = "dod") -> Dict:
+        """
+        FULL DISK WIPE: Destroy ALL data on selected disk
+        Wipes all files and folders, then fills free space
+        
+        Args:
+            drive_letter: Drive letter (e.g., "E:\")
+            method: Wipe method (zeros, dod, gutmann)
+        
+        Returns:
+            Dictionary with results
+        """
+        self._cancelled = False
+        start_time = time.time()
+        
+        results = {
+            'total_files': 0,
+            'wiped_files': 0,
+            'failed_files': 0,
+            'total_folders': 0,
+            'total_size': 0,
+            'errors': []
+        }
+        
+        try:
+            print(f"\n[ПОВНЕ ЗНИЩЕННЯ ДИСКА] Диск: {drive_letter}")
+            print(f"  Метод: {method}\n")
+            
+            if not os.path.exists(drive_letter):
+                results['error'] = f"Диск не знайдено: {drive_letter}"
+                results['success'] = False
+                return results
+            
+            # Step 1: Collect all files on disk
+            print("[ПОВНЕ ЗНИЩЕННЯ] Збір файлів на диску...")
+            all_files = []
+            all_dirs = []
+            
+            for root, dirs, files in os.walk(drive_letter):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    all_files.append(file_path)
+                for dir_name in dirs:
+                    dir_path = os.path.join(root, dir_name)
+                    all_dirs.append(dir_path)
+            
+            results['total_files'] = len(all_files)
+            results['total_folders'] = len(all_dirs)
+            
+            print(f"  Знайдено файлів: {len(all_files)}")
+            print(f"  Знайдено папок: {len(all_dirs)}\n")
+            
+            # Step 2: Wipe all files
+            print("[ПОВНЕ ЗНИЩЕННЯ] Знищення файлів...")
+            
+            for idx, file_path in enumerate(all_files, 1):
+                if self._cancelled:
+                    results['status'] = 'CANCELLED'
+                    break
+                
+                try:
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
+                        file_size = os.path.getsize(file_path)
+                        results['total_size'] += file_size
+                        
+                        # Wipe file based on method
+                        if method == "zeros":
+                            self.wipe_zeros(file_path)
+                        elif method == "dod":
+                            self.wipe_dod(file_path)
+                        elif method == "gutmann":
+                            self.wipe_gutmann(file_path)
+                        else:
+                            # Default to DoD
+                            self.wipe_dod(file_path)
+                        
+                        # Delete file after wipe
+                        os.remove(file_path)
+                        results['wiped_files'] += 1
+                        
+                        # Progress
+                        if self.progress_callback:
+                            progress = (idx / len(all_files)) * 100
+                            self.progress_callback(
+                                idx, len(all_files), f"File {idx}/{len(all_files)}",
+                                progress, idx, len(all_files)
+                            )
+                        
+                        if idx % 10 == 0:
+                            print(f"  Знищено: {idx}/{len(all_files)} файлів")
+                            
+                except Exception as e:
+                    results['failed_files'] += 1
+                    results['errors'].append(f"{file_path}: {str(e)}")
+                    print(f"ПОМИЛКА: {file_path} - {e}")
+            
+            print(f"\n  Знищено файлів: {results['wiped_files']}/{results['total_files']}")
+            
+            # Step 3: Remove empty directories
+            print(f"\n[ПОВНЕ ЗНИЩЕННЯ] Видалення порожніх папок...")
+            all_dirs_sorted = sorted(all_dirs, reverse=True)  # Bottom-up
+            
+            for dir_path in all_dirs_sorted:
+                try:
+                    if os.path.exists(dir_path) and not os.listdir(dir_path):
+                        os.rmdir(dir_path)
+                except:
+                    pass
+            
+            # Step 4: Fill remaining free space
+            print(f"\n[ПОВНЕ ЗНИЩЕННЯ] Заповнення вільного простору...")
+            free_space_result = self.wipe_free_space(drive_letter, method)
+            
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['status'] = 'SUCCESS'
+            results['success'] = results['failed_files'] == 0
+            results['free_space_filled'] = free_space_result.get('total_space_filled', 0)
+            
+            print(f"\n[ПОВНЕ ЗНИЩЕННЯ] Завершено!")
+            print(f"  Знищено файлів: {results['wiped_files']}")
+            print(f"  Загальний розмір: {self._format_size(results['total_size'])}")
+            print(f"  Час: {duration:.2f} сек.\n")
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            results['duration'] = duration
+            results['status'] = 'ERROR'
+            results['error'] = str(e)
+            results['success'] = False
+            print(f"\nПОМИЛКА: {e}\n")
+        
+        return results
+
     @staticmethod
     def _format_size(size_bytes: int) -> str:
         """Format size to human readable"""

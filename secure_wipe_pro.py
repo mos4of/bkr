@@ -450,6 +450,7 @@ class SecureWipePro(ctk.CTk):
         )
         self.disk_combo.grid(row=1, column=0, sticky="ew", pady=(5, 0))
         
+        # Set default value
         if drives:
             self.disk_combo.set(drives[0])
             self.selected_drive.set(drives[0])
@@ -570,7 +571,7 @@ class SecureWipePro(ctk.CTk):
         desc_map = {
             "file": "Знищити один файл обраним методом",
             "folder": "Рекурсивно знищити всі файли в папці",
-            "disk": "Заповнити вільний простір диска"
+            "disk": "ПОВНЕ ЗНИЩЕННЯ ВСЬОГО ДИСКА (файли + папки + вільний простір)"
         }
         self.mode_desc_label.configure(text=desc_map.get(mode, ""))
         
@@ -867,9 +868,9 @@ class SecureWipePro(ctk.CTk):
                                         target, result)
                     
                 elif mode == "disk":
-                    # Режим 3: Диск
-                    result = self.engine.wipe_free_space(target, method)
-                    WipeEngine.save_log(f"Disk wipe - {method}", 
+                    # Режим 3: ПОВНЕ ЗНИЩЕННЯ ДИСКА
+                    result = self.engine.wipe_disk_full(target, method)
+                    WipeEngine.save_log(f"FULL Disk wipe - {method}", 
                                         target, result)
                 
                 # Завершення
