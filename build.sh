@@ -1,22 +1,27 @@
 #!/bin/bash
 # build.sh - Build script for Linux/macOS
-# SecureWipe Pro v1.0 - PyInstaller build
+# SecureWipe Pro v2.0 — NIST SP 800-88r1 / IEEE 2883-2022
 
 echo "==============================================="
-echo "  SecureWipe Pro v1.0 - Build Script"
+echo "  SecureWipe Pro v2.0 - Build Script"
+echo "  NIST SP 800-88r1 / IEEE 2883-2022"
 echo "==============================================="
 echo ""
 
+# Check Python 3.10+
+PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo "[INFO] Python version: $PYTHON_VERSION"
+
 # Check if PyInstaller is installed
-if ! pip show pyinstaller > /dev/null 2>&1; then
+if ! pip3 show pyinstaller > /dev/null 2>&1; then
     echo "[INFO] Installing PyInstaller..."
-    pip install pyinstaller
+    pip3 install pyinstaller
 fi
 
 # Check if CustomTkinter is installed
-if ! pip show customtkinter > /dev/null 2>&1; then
+if ! pip3 show customtkinter > /dev/null 2>&1; then
     echo "[INFO] Installing CustomTkinter..."
-    pip install customtkinter
+    pip3 install customtkinter
 fi
 
 echo ""
@@ -43,7 +48,7 @@ echo "[SUCCESS] Build completed!"
 echo "Executable: dist/SecureWipePro"
 echo ""
 
-# Optional: Create releases folder
+# Create releases folder
 mkdir -p releases
 cp "dist/SecureWipePro" "releases/"
 echo "[INFO] Copied to releases/SecureWipePro"
